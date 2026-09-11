@@ -124,8 +124,8 @@ struct Palse {
 };
 
 struct EntarTainmentLayer {
-	Surface<F16> surface;
-	Palse<F16> palse;
+	Surface<Rational<std::intmax_t>> surface,ZBuffer;
+	Palse<Rational<std::intmax_t>> palse;
 	EntarTainmentLayer(F16 width, F16 height, std::intmax_t palse_size) : surface(static_cast<std::intmax_t>(width), static_cast<std::intmax_t>(height)), palse(palse_size) {
 		palse.data.resize(static_cast<std::size_t>(width * height));
 	}

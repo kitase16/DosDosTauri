@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="DosDosTauri.vcxproj" />
+  <Project Path="DosDosTauri.vcxproj" Id="66c7097d-c466-41c7-9c17-511300b7cfca" />
 </Solution>
