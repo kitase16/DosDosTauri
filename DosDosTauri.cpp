@@ -9,6 +9,7 @@
 #include <random>
 #include <string>
 #include <deque>
+#include <limits>
 
 //i lose by human engineering, but i win by human engineering not
 
@@ -22,6 +23,7 @@ public:
 	Rational(T a, T b) : A(a), B(b) {}
 	Rational(T N) : A(N), B(1) {}
 	Rational(float N) : A(N), B(1) {}
+	Rational(Rational<T>& In) : A(In.A), B(In.B) {}
 
 	bool Denomi() {
 		T AA = std::gcd(A, B);
@@ -79,10 +81,10 @@ public:
 		return static_cast<float>(A) / static_cast<float>(B);
 	}
 
-
-	float Divaide() {
+	template<class R>
+	R Divaide() {
 		//Denomi();
-		return static_cast<float>(A) / static_cast<float>(B);
+		return A / static_cast<float>(B);
 	}
 
 
@@ -98,14 +100,14 @@ struct Surface {
 	std::vector<T> data;
 
 	Surface(T w, T h) : width(w), height(h) {
-		data.resize(width * height);
+		data.resize(width.Divaide<float>() * height.Divaide<float>());
 	}
 	T area() const {
 		return width * height;
 	}
 
 	bool SetPixel(T x, T y, T value) {
-		if (x < 0 || x >= width || y < 0 || y >= height) {
+		if (x.Divaide<float>() < 0 || x.Divaide<float>() >= width.Divaide<float>() || y.Divaide<float>() < 0 || y.Divaide<float>() >= height.Divaide<float>()) {
 			return false;
 		}
 		data[y * width + x] = value;
@@ -123,11 +125,13 @@ struct Palse {
 	std::vector<T> data;
 };
 
+struct MemoryAllocater_asBits;
+
 struct EntarTainmentLayer {
 	Surface<Rational<std::intmax_t>> surface,ZBuffer;
 	Palse<Rational<std::intmax_t>> palse;
-	EntarTainmentLayer(F16 width, F16 height, std::intmax_t palse_size) : surface(static_cast<std::intmax_t>(width), static_cast<std::intmax_t>(height)), palse(palse_size) {
-		palse.data.resize(static_cast<std::size_t>(width * height));
+	EntarTainmentLayer(Rational<std::intmax_t> width, Rational<std::intmax_t> height, std::intmax_t palse_size) : surface({ width }, { height }), palse(palse_size) {
+		palse.data.resize(static_cast<std::size_t>(width.Divaide<float>() * height.Divaide<float>()));
 	}
 };
 
@@ -174,6 +178,94 @@ protected:
 	std::vector<std::shared_ptr<IUpdateable>> updateables;
 };
 
+
+struct MemoryAllocater_AsBits{
+	MemoryAllocater_AsBits() = default;
+	MemoryAllocater_AsBits(std::size_t size) {
+		buffer.resize(size);
+	}
+	
+	struct MemoryHolder_asBit {
+		char Tag = 'B';
+		std::size_t BaseAddress = 0;
+		std::size_t Length = 0;
+		MemoryAllocater_AsBits* Parent;
+
+		bool Index(std::size_t offset) {
+			if (offset >= Length) {
+				throw std::out_of_range("Offset is out of range.");
+			}
+			return *(Parent->buffer.data() + (BaseAddress/8)+ (offset/8) + (offset % 8)) & (1 << (offset % 8));
+		}
+
+		void offset(std::size_t offset, bool value) {
+			if (offset >= Length) {
+				throw std::out_of_range("Offset is out of range.");
+			}
+			if (value) {
+				*(Parent->buffer.data() + (BaseAddress / 8) + (offset / 8) + (offset % 8)) |= (1 << (offset % 8));
+			}
+			else {
+				*(Parent->buffer.data() + (BaseAddress / 8) + (offset / 8) + (offset % 8)) &= ~(1 << (offset % 8));
+			}
+		}
+
+
+	};
+	
+	std::vector<std::uint8_t> buffer;
+	std::vector<std::shared_ptr<MemoryHolder_asBit>> holders;
+
+	std::shared_ptr<MemoryHolder_asBit> Allocate(std::size_t length) {
+		std::size_t address = 0;
+		for (const auto& holder : holders) {
+			if (address + length <= holder->BaseAddress) {
+				break;
+			}
+			address = holder->BaseAddress + holder->Length;
+		}
+		if (address + length > buffer.size()) {
+			buffer.resize(address + length);
+		}
+		auto newHolder = std::make_shared<MemoryHolder_asBit>();
+		newHolder->BaseAddress = address;
+		newHolder->Length = length;
+		newHolder->Parent = this;
+		holders.push_back(newHolder);
+		return newHolder;
+	}
+
+	bool free(std::shared_ptr<MemoryHolder_asBit> holder) {
+		auto it = std::find(holders.begin(), holders.end(), holder);
+		if (it != holders.end()) {
+			holders.erase(it);
+			return true;
+		}
+		return false;
+	}
+
+	bool AllocBaseByte(std::size_t length) {
+		buffer.resize(length);
+		return true;
+	}
+
+	std::size_t Size() const {
+		return buffer.size();
+	}
+
+	std::size_t HolderCount() const {
+		return holders.size();
+	}
+
+	std::shared_ptr<MemoryHolder_asBit> operator[](std::size_t index) {
+		if (index >= holders.size()) {
+			throw std::out_of_range("Index is out of range.");
+		}
+		return holders[index];
+	}
+};
+
+
 struct UTF8_One {
 
 	struct {
@@ -188,16 +280,15 @@ struct UTF8_One {
 		};
 	};
 
-
-	std::uint8_t Char[4] = { 0,0,0,'\0'};
 	std::uint8_t Length = 0;
+	std::uint8_t Char[4] = { 0,0,0,'\0'};
 
 	operator char* () {
 		return reinterpret_cast<char*>(Char);
 	}
 };
 
-UTF8_One ParseOne(const char* P, int I, int L) {
+UTF8_One ParseOne(const char* P, int I, size_t L) {
 	UTF8_One U;
 	if (I < L) {
 		U.Char[0] = static_cast<std::uint8_t>(P[I]);
@@ -244,7 +335,7 @@ struct Screen {
 
 class DosWindow : public Corutine::IUpdateable {
 public:
-	DosWindow() : layer(80, 25, 2000), screen{ 80, 25 }, Back{ 80, 25 } {
+	DosWindow() : layer(80, 25, 2000), screen{ 80, 25 }, Back{ 80, 25 }, Memory(1024){
 		screen.buffer.resize(screen.width * screen.height);
 		Back.buffer.resize(Back.width * Back.height);
 	}
@@ -260,7 +351,7 @@ public:
 		if (y < 0 || y >= screen.height) {
 			return;
 		}
-		for (std::intmax_t x = 0; x < line.size() && x < screen.width; ++x) {
+		for (std::intmax_t x = 0; x < line.size() && x < static_cast<std::intmax_t>(screen.width); ++x) {
 			screen.Index(x, y) = line[x];
 		}
 		BLines.push_front(line);
@@ -288,6 +379,7 @@ protected:
 	EntarTainmentLayer layer;
 	Screen screen, Back;
 	std::deque<std::vector<UTF8_One>> BLines;
+	MemoryAllocater_AsBits Memory;	
 };
 
 std::vector<UTF8_One> MakeInputLine() {
@@ -301,9 +393,11 @@ std::vector<UTF8_One> MakeInputLine() {
 		}
 	}
 
-
+	if (input.length() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+	    // エラー処理（長すぎる等)
+	}
 	for (int i = 0; i < input.length();) {
-		UTF8_One U = ParseOne(input.c_str(), i, input.length());
+		UTF8_One U = ParseOne(input.c_str(), i, static_cast<int>(input.length()));
 		line.push_back(U);
 		i += U.Length + 1;
 	}
@@ -312,7 +406,7 @@ std::vector<UTF8_One> MakeInputLine() {
 
 
 //not complete.
-
+/**/
 int main() {
 	DosWindow W = DosWindow();
 
@@ -325,3 +419,18 @@ int main() {
 
 	return 0;
 }
+/** /
+
+int main() {
+	DosWindow W = DosWindow();
+	// Example usage of the DosWindow
+	W.SetCharcter(0, 0, UTF8_One{ 'H', { 0, 0, 0, 0 } });
+	W.SetCharcter(1, 0, UTF8_One{ 'e', { 0, 0, 0, 0 } });
+	W.SetCharcter(2, 0, UTF8_One{ 'l', { 0, 0, 0, 0 } });
+	W.SetCharcter(3, 0, UTF8_One{ 'l', { 0, 0, 0, 0 } });
+	W.SetCharcter(4, 0, UTF8_One{ 'o', { 0, 0, 0, 0 } });
+	// Update the window to render the changes
+	W.Update(W.corutine);
+	return 0;
+}
+/**/
